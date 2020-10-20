@@ -22,11 +22,13 @@ double offset;              /* distance top molecule to start of box */
 double box;                 /* length of periodic box */
 
 vector<double> charge;      /* vector for the charges of each atom */
-vector<vector<double>> latmin, radmin, offmin, eCDmin, eLJmin, eTotmin;
+vector<vector<vector<double>>> latmin, radmin, offmin, eCDmin, eLJmin, eTotmin;
+vector<vector <double>> CDLatmin, CDRadmin, CDOffmin, CDmin;
 
 /* Functions */
 void readAtoms(string &file);
-void header(string &file);
+void headerBoth(string &file);
+void headerCD(string &file);
 double factorCD(double q1, double q2, double d);
 double factorLJ(double d);
 double distance(double pos, double first, int n);
@@ -49,37 +51,52 @@ int main(int argc, char const *argv[])
     L = (N - 1) * distance_atoms;
     /************************************************************************/
     file = "output.dat";    /* where the simulation results go */
-    header(file);
+    // file = "outputCD.dat";  /* only CD potential turned on */
+    headerBoth(file);
+    // headerCD(file);
     /************************************************************************/
     cout << "\n\n:: running computation...";
     /* Parameterspace exploration */
-    int lat_max = (int) ceil(max_cutoff / (0.1 * diameter_atom));
+    // int lat_max = (int) ceil(max_cutoff / (0.1 * diameter_atom));
+    int lat_max = 0;
     // int rad_max = (int) ceil(10.0 / 0.1);
-    int rad_max = (int) ceil((L + 2 * max_cutoff) / 0.1);
+    int rad_max = (int) ceil((L + 2 * max_cutoff) / distance_atoms);
     int off_max;
     int maxRuns = (lat_max + 1) * (rad_max + 1);
     int counter = 0;
-    double lj, cd, lje, cde;
+    double lj, lje;
+    double cd, cde;
 
-    latmin.assign(50, vector<double> (20, 0));
-    radmin.assign(50, vector<double> (20, 0));
-    offmin.assign(50, vector<double> (20, 0));
-    eLJmin.assign(50, vector<double> (20, 1e6));
-    eCDmin.assign(50, vector<double> (20, 1e6));
-    eTotmin.assign(50, vector<double> (20, 1e6));
+    /* Assign needed data vectors */
+    latmin.assign(10, vector<vector<double>> (50, vector<double> (20, 0)));
+    radmin.assign(10, vector<vector<double>> (50, vector<double> (20, 0)));
+    offmin.assign(10, vector<vector<double>> (50, vector<double> (20, 0)));
+    eLJmin.assign(10, vector<vector<double>> (50, vector<double> (20, 1e6)));
+    eCDmin.assign(10, vector<vector<double>> (50, vector<double> (20, 1e6)));
+    eTotmin.assign(10, vector<vector<double>> (50, vector<double> (20, 1e6)));
+
+    /* 10 to account for 10 minima */
+    // CDLatmin.assign(10, vector<double> (20, 0));
+    // CDRadmin.assign(10, vector<double> (20, 0));
+    // CDOffmin.assign(10, vector<double> (20, 0));
+    // CDmin.assign(10, vector<double> (20, 1e6));
 
     for (int lat = 0; lat <= lat_max; lat++) {
-        lat_gap = lat * 0.1 * diameter_atom;
+        // lat_gap = lat * 0.1 * diameter_atom;
+        lat_gap = diameter_atom;
 
         for (int rad = 0; rad <= rad_max; rad++) {
             cout << "\n --> " << (100. * counter) / (1. * maxRuns);
             cout << "\% done ...";
-            rad_gap = rad * 0.1;
+            rad_gap = rad * distance_atoms;
             box = L + rad_gap;
-            off_max = (int) ceil(box / 0.1);
-
+            off_max = (int) ceil((box - 2.0) / distance_atoms);
+            // cout << "\n\noffmax = " << off_max;
             for (int off = 0; off <= off_max; off++) {
-                offset = off * 0.1;
+                offset = 1.0 + off * distance_atoms;
+                /* separating the offset range into 1/10ths */
+                int tmp = (int) floor(10.0 * off / off_max);
+                tmp = min(tmp, 9);
 
                 /* Energy calculation for given parameters above */
                 lj = totalLJfactor();
@@ -89,21 +106,35 @@ int main(int argc, char const *argv[])
                  * LJepsilon from 0.01 to 0.5 in 0.01 steps
                  * CDepsilon from 10 to 200 in 10 steps
                  */
+                /* Both CD and LJ potential */
                 for (int i = 0; i < 50; i++) {
                     lje = (i + 1) * 0.01 * lj;
                     for (int j = 0; j < 20; j++) {
                         cde = cd / ((j + 1) * 10);
 
-                        if (lje + cde < eTotmin[i][j]) {
-                            eLJmin[i][j] = lje;
-                            eCDmin[i][j] = cde;
-                            eTotmin[i][j] = lje + cde;
-                            latmin[i][j] = lat_gap;
-                            radmin[i][j] = rad_gap;
-                            offmin[i][j] = offset;
+                        if (lje + cde < eTotmin[tmp][i][j]) {
+                            eLJmin[tmp][i][j] = lje;
+                            eCDmin[tmp][i][j] = cde;
+                            eTotmin[tmp][i][j] = lje + cde;
+                            // latmin[tmp][i][j] = lat_gap;
+                            radmin[tmp][i][j] = rad_gap;
+                            offmin[tmp][i][j] = offset;
                         }
                     }
                 }
+
+                /* Only CD potential */
+                // for (int i = 0; i < 20; i++) {
+                //     cde = cd / ((i + 1) * 10);
+                //
+                //     if (cde < CDmin[tmp][i]) {
+                //         CDmin[tmp][i] = cde;
+                //         CDLatmin[tmp][i] = lat_gap;
+                //         CDRadmin[tmp][i] = rad_gap;
+                //         CDOffmin[tmp][i] = offset;
+                //     }
+                // }
+
             }
             counter++;
         }
@@ -114,8 +145,8 @@ int main(int argc, char const *argv[])
     // // rad_gap = 0.25 * 12 * L + 0.0 * max_cutoff + 0;
     // // offset = 1.0 * 0 * L + 268.0;
     // // lat_gap = 1.12;
-    // rad_gap = 1.2;
-    // offset = 200 * distance_atoms;
+    // rad_gap = 1.1; //L + 2 * max_cutoff;
+    // offset = 0 * distance_atoms + 192.2;
     // box = L + rad_gap;
     //
     // cout << "\n\nlat_gap = " << lat_gap;
@@ -123,28 +154,67 @@ int main(int argc, char const *argv[])
     // cout << "\noffset = " << offset;
     // cout << "\nbox length = " << box;
     //
+    // file = "outputTest.dat";
+    // FILE *test;
+    // test = fopen(file.c_str(), "w");
+    // int max_k = (int) ceil(box / 0.1);
+    // double factor = 10;
+    // fprintf(test, "#atoms per molecule N = %i", N);
+    // fprintf(test, "\n#distance_atoms = %.3f", distance_atoms);
+    // fprintf(test, "\n#molecule_length = %.3f", L);
+    // fprintf(test, "\n#lat_gap = %.3f", lat_gap);
+    // fprintf(test, "\n#rad_gap = %.3f", rad_gap);
+    // fprintf(test, "\n\n#offset");
+    // fprintf(test, "\tE_LJ");
+    // fprintf(test, "\tE_CD");
+    // fprintf(test, "\tE_total");
+    // for (int k = 0; k <= max_k; k++) {
+    //     offset = k * 0.1;
+    //     fprintf(test, "\n%.3f", offset);
+    //     double elj = totalLJfactor() * 0.01;
+    //     double ecd = totalCDfactor() / factor;
+    //     fprintf(test, "\t%.3f", elj);
+    //     fprintf(test, "\t%.3f", ecd);
+    //     fprintf(test, "\t%.3f", elj + ecd);
+    // }
+    // fclose(test);
+
     // cout << "\n\nTotal LJ energy = " << 0.01 * totalLJfactor();
     // cout << "\nTotal CD energy = " << totalCDfactor() / 50.0;
-
     /************************************************************************/
     FILE *outf;
     outf = fopen(file.c_str(), "a");
+    /* Both LJ and CD potential */
     for (int i = 0; i < 50; i++) {
         for (int j = 0; j < 20; j++) {
             fprintf(outf, "\n");
             fprintf(outf, "%.3f", (i + 1) * 0.01);
-            fprintf(outf, "\t\t%.3f", (j + 1) * 10.);
-            fprintf(outf, "\t\t\t%.3f", latmin[i][j]);
-            fprintf(outf, "\t\t\t%.3f", radmin[i][j]);
-            fprintf(outf, "\t\t%.3f", offmin[i][j]);
-            fprintf(outf, "\t\t\t%.3f", L + radmin[i][j] - offmin[i][j]);
-            fprintf(outf, "\t\t\t%.3f", eCDmin[i][j]);
-            fprintf(outf, "\t\t%.3f", eLJmin[i][j]);
-            fprintf(outf, "\t\t%.3f", eTotmin[i][j]);
+            fprintf(outf, "\t%.3f", (j + 1) * 10.);
+            fprintf(outf, "\t%.3f", lat_gap);
+            for (int k = 0; k < 10; k++) {
+                fprintf(outf, "\t%.3f", radmin[k][i][j]);
+                fprintf(outf, "\t%.3f", offmin[k][i][j]);
+                fprintf(outf, "\t%.3f", L + radmin[k][i][j] - offmin[k][i][j]);
+                fprintf(outf, "\t%.3f", eCDmin[k][i][j]);
+                fprintf(outf, "\t%.3f", eLJmin[k][i][j]);
+                fprintf(outf, "\t%.3f", eTotmin[k][i][j]);
+            }
         }
         fprintf(outf, "\n");
     }
-    fclose(outf);
+    /* Only CD potential */
+    // for (int j = 0; j < 20; j++) {
+    //     fprintf(outf, "\n");
+    //     fprintf(outf, "%.3f", (j + 1) * 10.);
+    //     for (int i = 0; i < 10; i++) {
+    //         fprintf(outf, "\t\t\t%.3f", CDLatmin[i][j]);
+    //         fprintf(outf, "\t\t\t%.3f", CDRadmin[i][j]);
+    //         fprintf(outf, "\t\t%.3f", CDOffmin[i][j]);
+    //         fprintf(outf, "\t\t\t%.3f", L + CDRadmin[i][j] - CDOffmin[i][j]);
+    //         fprintf(outf, "\t\t\t%.3f", CDmin[i][j]);
+    //     }
+    // }
+    // fclose(outf);
     /************************************************************************/
     auto end = chrono::high_resolution_clock::now();
     auto duration = chrono::duration_cast<chrono::seconds>(end - start);
@@ -175,7 +245,7 @@ void readAtoms(string &file)
     cout << " Molecule length L = " << L << ".";
 }
 
-void header(string &file)
+void headerBoth(string &file)
 {
     FILE *outf;
     outf = fopen(file.c_str(), "w");
@@ -185,12 +255,32 @@ void header(string &file)
     fprintf(outf, "\n\n#LJ_epsilon");
     fprintf(outf, "\tCD_epsilon");
     fprintf(outf, "\tlateral_gap_min");
-    fprintf(outf, "\tradial_gap_min");
-    fprintf(outf, "\toffset_min");
-    fprintf(outf, "\tD-periodicity_min");
-    fprintf(outf, "\tE_CD_min");
-    fprintf(outf, "\tE_LJ_min");
-    fprintf(outf, "\tE_total_min");
+    for (int i = 0; i < 10; i++) {
+        fprintf(outf, "\tradial_gap_min_%i", i);
+        fprintf(outf, "\toffset_min_%i", i);
+        fprintf(outf, "\tD-periodicity_min_%i", i);
+        fprintf(outf, "\tE_CD_min_%i", i);
+        fprintf(outf, "\tE_LJ_min_%i", i);
+        fprintf(outf, "\tE_total_min_%i", i);
+    }
+    fclose(outf);
+}
+
+void headerCD(string &file)
+{
+    FILE *outf;
+    outf = fopen(file.c_str(), "w");
+    fprintf(outf, "#atoms per molecule N = %i", N);
+    fprintf(outf, "\n#distance_atoms = %.3f", distance_atoms);
+    fprintf(outf, "\n#molecule_length = %.3f", L);
+    fprintf(outf, "\n\n#CD_epsilon");
+    for (int i = 0; i < 10; i++) {
+        fprintf(outf, "\tlateral_gap_min_%i", i);
+        fprintf(outf, "\tradial_gap_min_%i", i);
+        fprintf(outf, "\toffset_min_%i", i);
+        fprintf(outf, "\tD-periodicity_min_%i", i);
+        fprintf(outf, "\tE_CD_min_%i", i);
+    }
     fclose(outf);
 }
 
