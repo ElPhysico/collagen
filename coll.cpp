@@ -21,7 +21,7 @@ double rad_gap;             /* distance end focus molecue to end of box */
 double offset;              /* distance top molecule to start of box */
 double box;                 /* length of periodic box */
 
-vector<double> charge;      /* vector for the charges of each atom */
+vector<double> charge, charge_ind;  /* vector for the charges of each atom */
 vector<vector<vector<double>>> latmin, radmin, offmin, eCDmin, eLJmin, eTotmin;
 vector<vector <double>> CDLatmin, CDRadmin, CDOffmin, CDmin;
 
@@ -45,12 +45,15 @@ int main(int argc, char const *argv[])
     auto start = chrono::high_resolution_clock::now();
     /************************************************************************/
     string file;
-    // file = "charge_distribution_36";            /* Anne's collagen */
-    file = "charge_distribution_1054";       /* Native collagen */
+    // file = "./dis/charge_distribution_36";            /* Anne's collagen */
+    file = "./dis/charge_distribution_1054";       /* Native collagen */
     readAtoms(file);
     L = (N - 1) * distance_atoms;
+    // for (int i = 0; i < (int) charge_ind.size(); i++) {
+    //   cout << "\n " << charge_ind[i];
+    // }
     /************************************************************************/
-    file = "output.dat";    /* where the simulation results go */
+    file = "./data/output.dat";    /* where the simulation results go */
     // file = "outputCD.dat";  /* only CD potential turned on */
     headerBoth(file);
     // headerCD(file);
@@ -61,6 +64,7 @@ int main(int argc, char const *argv[])
     int lat_max = 0;
     // int rad_max = (int) ceil(10.0 / 0.1);
     int rad_max = (int) ceil((L + 2 * max_cutoff) / distance_atoms);
+    // int rad_max = (int) ceil((L + 2 * max_cutoff) / 0.1);
     int off_max;
     int maxRuns = (lat_max + 1) * (rad_max + 1);
     int counter = 0;
@@ -68,7 +72,7 @@ int main(int argc, char const *argv[])
     double cd, cde;
 
     /* Assign needed data vectors */
-    latmin.assign(10, vector<vector<double>> (50, vector<double> (20, 0)));
+    // latmin.assign(10, vector<vector<double>> (50, vector<double> (20, 0)));
     radmin.assign(10, vector<vector<double>> (50, vector<double> (20, 0)));
     offmin.assign(10, vector<vector<double>> (50, vector<double> (20, 0)));
     eLJmin.assign(10, vector<vector<double>> (50, vector<double> (20, 1e6)));
@@ -89,14 +93,19 @@ int main(int argc, char const *argv[])
             cout << "\n --> " << (100. * counter) / (1. * maxRuns);
             cout << "\% done ...";
             rad_gap = rad * distance_atoms;
+            // rad_gap = rad * 0.1;
             box = L + rad_gap;
-            off_max = (int) ceil((box - 2.0) / distance_atoms);
+            // off_max = (int) ceil((box - 2.0) / distance_atoms);
+            // off_max = (int) ceil(box / 0.1);
+            off_max = (int) ceil((L - rad_gap) / distance_atoms);
             // cout << "\n\noffmax = " << off_max;
             for (int off = 0; off <= off_max; off++) {
-                offset = 1.0 + off * distance_atoms;
+                offset = rad_gap + off * distance_atoms;
+                // offset = off * 0.1;
                 /* separating the offset range into 1/10ths */
-                int tmp = (int) floor(10.0 * off / off_max);
-                tmp = min(tmp, 9);
+                // int tmp = (int) floor(10.0 * off / off_max);
+                // tmp = min(tmp, 9);
+                int tmp = 0;
 
                 /* Energy calculation for given parameters above */
                 lj = totalLJfactor();
@@ -190,8 +199,9 @@ int main(int argc, char const *argv[])
             fprintf(outf, "\n");
             fprintf(outf, "%.3f", (i + 1) * 0.01);
             fprintf(outf, "\t%.3f", (j + 1) * 10.);
+            // fprintf(outf, "\t%.3f", latmin[0][i][j]);
             fprintf(outf, "\t%.3f", lat_gap);
-            for (int k = 0; k < 10; k++) {
+            for (int k = 0; k < 1; k++) {
                 fprintf(outf, "\t%.3f", radmin[k][i][j]);
                 fprintf(outf, "\t%.3f", offmin[k][i][j]);
                 fprintf(outf, "\t%.3f", L + radmin[k][i][j] - offmin[k][i][j]);
@@ -220,6 +230,7 @@ int main(int argc, char const *argv[])
     auto duration = chrono::duration_cast<chrono::seconds>(end - start);
     cout << "\n\n\n:: ... finished in " << duration.count() << " s.\n\n\n";
     /************************************************************************/
+
     return 0;
 }
 
@@ -237,6 +248,9 @@ void readAtoms(string &file)
         getline(myfile, line);
         N++;
         charge.push_back(atof(line.c_str()));
+        if (charge[N - 1] != 0) {
+          charge_ind.push_back(N - 1);
+        }
         // cout << "\natom " << N << " has charge " << line;
     }
     myfile.close();
@@ -449,50 +463,49 @@ double totalCDfactor()
     int left, right;
     double dx = sqrt(cd_cutoff * cd_cutoff - lat_gap * lat_gap);
     sum = 0;
-    for (int atom = 1; atom <= N; atom++) {
-        q1 = charge[atom - 1];
-        if (q1 != 0) {
-            pos = (atom - 1) * distance_atoms;
+    for (int atom = 0; atom < (int) charge_ind.size(); atom++) {
+        q1 = charge[charge_ind[atom]];
+        pos = charge_ind[atom] * distance_atoms;
 
-            /* Atom atom feels from top left molecule: */
-            sum += CD_per_mol(pos, q1, dx, offset - box);
+        /* Atom atom feels from top left molecule: */
+        sum += CD_per_mol(pos, q1, dx, offset - box);
 
-            /* Atom atom feels from top molecule: */
-            sum += CD_per_mol(pos, q1, dx, offset);
+        /* Atom atom feels from top molecule: */
+        sum += CD_per_mol(pos, q1, dx, offset);
 
-            /* Atom atom feels from top right molecule: */
-            sum += CD_per_mol(pos, q1, dx, offset + box);
+        /* Atom atom feels from top right molecule: */
+        sum += CD_per_mol(pos, q1, dx, offset + box);
 
-            /* Atom atom feels from left molecule: */
-            left = ceil(((pos - cd_cutoff) + box) / distance_atoms);
-            right = floor(((pos + cd_cutoff) + box) / distance_atoms);
-            if (left < N && right >= 0) {
-                left = max(left, 0);
-                right = min(right, N - 1);
-                for (int i = 0; i <= right - left; i++) {
-                    q2 = charge[left + i];
-                    if (q2 != 0) {
-                        d = abs(pos + box - (left + i) * distance_atoms);
-                        sum += factorCD(q1, q2, d);
-                    }
-                }
-            }
-
-            /* Atom atom feels from right molecule: */
-            left = ceil(((pos - cd_cutoff) - box) / distance_atoms);
-            right = floor(((pos + cd_cutoff) - box) / distance_atoms);
-            if (left < N && right >= 0) {
-                left = max(left, 0);
-                right = min(right, N - 1);
-                for (int i = 0; i <= right - left; i++) {
-                    q2 = charge[left + i];
-                    if (q2 != 0) {
-                        d = abs(pos - box - (left + i) * distance_atoms);
-                        sum += factorCD(q1, q2, d);
-                    }
+        /* Atom atom feels from left molecule: */
+        left = ceil(((pos - cd_cutoff) + box) / distance_atoms);
+        right = floor(((pos + cd_cutoff) + box) / distance_atoms);
+        if (left < N && right >= 0) {
+            left = max(left, 0);
+            right = min(right, N - 1);
+            for (int i = 0; i <= right - left; i++) {
+                q2 = charge[left + i];
+                if (q2 != 0) {
+                    d = abs(pos + box - (left + i) * distance_atoms);
+                    sum += factorCD(q1, q2, d);
                 }
             }
         }
+
+        /* Atom atom feels from right molecule: */
+        left = ceil(((pos - cd_cutoff) - box) / distance_atoms);
+        right = floor(((pos + cd_cutoff) - box) / distance_atoms);
+        if (left < N && right >= 0) {
+            left = max(left, 0);
+            right = min(right, N - 1);
+            for (int i = 0; i <= right - left; i++) {
+                q2 = charge[left + i];
+                if (q2 != 0) {
+                    d = abs(pos - box - (left + i) * distance_atoms);
+                    sum += factorCD(q1, q2, d);
+                }
+            }
+        }
+
         // cout << "\nAfter atom " << atom << " the CD energy is " << sum / 150.0;
         // cout << "\t";
     }
