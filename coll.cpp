@@ -3,6 +3,7 @@
 #include <fstream>          /* ifstream, ... */
 #include <math.h>           /* ceil, ... */
 #include <vector>           /* vector, ... */
+#include <tuple>            /* tuple, ... */
 
 using namespace std;
 
@@ -20,12 +21,14 @@ double max_cutoff = max(cd_cutoff, lj_cutoff);
 double lat_gap;             /* lateral gap = top <-> bottom distance */
 double rad_gap;             /* distance end focus molecue to end of box */
 double offset;              /* distance top molecule to start of box */
+double dper;                /* d-periodicity */
 double box;                 /* length of periodic box */
 
 vector<double> charge, charge_ind;  /* vector for the charges of each atom */
 
 /* Functions */
 void readAtoms(string &file);
+void headerDper(string &file);
 void headerSingle(string &file);
 double factorCD(double q1, double q2, double d);
 double factorLJ(double d);
@@ -36,6 +39,8 @@ double CD_per_mol(double pos, double q1, double dx, double ref);
 double totalCDfactor();
 void singleEmin();
 void multipleEmin(int number);
+tuple<double, double, double, double> getMinimum(double dper);
+void writeDperProfile(string &file, double dper);
 
 
 
@@ -55,36 +60,52 @@ int main(int argc, char const *argv[])
     cout << "\n\n:: running computation...";
     /* Parameterspace exploration */
     lat_gap = diameter_atom;
-    // singleEmin();
-    multipleEmin(200);
+    file = "./data/dper=268.dat";
+    writeDperProfile(file, 268.0);
+    // double minLJ, minCD, rad, off;
+    // int max = (int) floor(L);
+    // file = "./data/dper.dat";
+    // FILE *outf;
+    // outf = fopen(file.c_str(), "w");
+    // fprintf(outf, "#dper\trad\toff\tCD\tLJ\tE");
+    // for (int i = 1; i <= max; i++) {
+    //   dper = i * 1.0;
+    //   cout << "\n  -> for dper = " << dper << "...";
+    //   tie(minLJ, minCD, rad, off) = getMinimum(dper);
+    //   fprintf(outf, "\n%.3f", dper);
+    //   fprintf(outf, "\t%.3f", rad);
+    //   fprintf(outf, "\t%.3f", off);
+    //   fprintf(outf, "\t%.3f", minCD);
+    //   fprintf(outf, "\t%.3f", minLJ);
+    //   fprintf(outf, "\t%.3f", minCD + minLJ);
+    //   cout << " done.";
+    // }
+    // fclose(outf);
+    // cout << "\nFor d-periodicity of " << dper << " we find a minimum of ";
+    // cout << minLJ + minCD << " (LJ = " << minLJ << ", CD = " << minCD;
+    // cout << ") at radial gap " << rad << " and offset " << off << ".";
 
-    // // double Z = 0.;
-    // // for (int i = 0; i < (int) totalEnergies.size(); i++) {
-    // //   Z += totalEnergies[i];
-    // //   cout << "\ntotalE[" << i << "] = " << totalEnergies[i];
-    // // }
-    // // double avg_rad = 0.;
-    // // double avg_off = 0.;
-    // // double prob = 0.;
-    // // int index = 0;
-    // // for (int rad = 0; rad <= rad_max; rad++) {
-    // //   rad_gap = rad * distance_atoms;
-    // //   off_max = (int) ceil((L - rad_gap - 10.) / distance_atoms);
-    // //   for (int off = 0; off <= off_max; off++) {
-    // //     offset = rad_gap + 5. + off * distance_atoms;
-    // //     prob = exp(-totalEnergies[index]) / Z;
-    // //     avg_rad += prob * rad_gap;
-    // //     avg_off += prob * off;
-    // //     index++;
-    // //   }
-    // //   cout << "\navg_rad = " << avg_rad;
-    // //   cout << "\navg_off = " << avg_off;
-    // // }
-    // //
-    // // cout << "\n\nThe weighted average D-periodicity is:";
-    // // cout << " " << L + avg_rad - avg_off;
-    // // cout << "\n\nZ = " << Z;
-    // // cout << "\n\nTotal energies.size() = " << totalEnergies.size();
+    // file = "./data/dper.dat";
+    // headerDper(file);
+    // FILE *outf;
+    // outf = fopen(file.c_str(), "a");
+    // for (int i = 0; i < 50; i++) {
+    //     for (int j = 0; j < 20; j++) {
+    //         fprintf(outf, "\n");
+    //         fprintf(outf, "%.3f", (i + 1) * 0.01);
+    //         fprintf(outf, "\t%.3f", (j + 1) * 10.);
+    //         fprintf(outf, "\t%i", ind[i][j]);
+    //         fprintf(outf, "\t%.3f", ind[i][j] * slicing);
+    //         fprintf(outf, "\t%.3f", ind[i][j] * slicing + L - dper);
+    //         fprintf(outf, "\t%.3f", eCDmin[i][j]);
+    //         fprintf(outf, "\t%.3f", eLJmin[i][j]);
+    //         fprintf(outf, "\t%.3f", eTotmin[i][j]);
+    //     }
+    //     fprintf(outf, "\n");
+    // }
+
+    // singleEmin();
+    // multipleEmin(200);
 
     /************************************************************************/
     /* Testparameter */
@@ -163,6 +184,23 @@ void readAtoms(string &file)
     cout << "\n -> " << N << " atoms read.";
     L = (N - 1) * distance_atoms;
     cout << " Molecule length L = " << L << ".";
+}
+
+void headerDper(string &file)
+{
+  FILE *outf;
+  outf = fopen(file.c_str(), "w");
+  fprintf(outf, "#atoms per molecule N = %i", N);
+  fprintf(outf, "\n#distance_atoms = %.3f", distance_atoms);
+  fprintf(outf, "\n#molecule_length = %.3f", L);
+  fprintf(outf, "\n\n#LJ_epsilon");
+  fprintf(outf, "\tCD_epsilon");
+  fprintf(outf, "\tIndex");
+  fprintf(outf, "\tRadialGap");
+  fprintf(outf, "\tOffset");
+  fprintf(outf, "\tE_CD_min");
+  fprintf(outf, "\tE_LJ_min");
+  fprintf(outf, "\tE_total_min");
 }
 
 void headerSingle(string &file)
@@ -488,6 +526,7 @@ void singleEmin()
       }
       fprintf(outf, "\n");
   }
+  fclose(outf);
 }
 
 void multipleEmin(int number)
@@ -568,4 +607,61 @@ void multipleEmin(int number)
         fprintf(outf, "\n");
     }
   }
+  fclose(outf);
+}
+
+tuple<double, double, double, double> getMinimum(double dper)
+{
+  double slicing = 0.1 * diameter_atom;
+  double lj, cd;
+  double minLJ = 1e10;
+  double minCD = 1e10;
+  int ind = 0;
+
+  double elj = 0.05;
+  double ecd = 10.0;
+
+  int rad_max = (int) ceil(dper / slicing);
+  for (int rad = 1; rad <= rad_max; rad++) {
+    rad_gap = rad * slicing;
+    box = L + rad_gap;
+    offset = L - dper + rad_gap;
+    lj = totalLJfactor() * elj;
+    cd = totalCDfactor() / ecd;
+    if (lj + cd < minLJ + minCD) {
+      minLJ = lj;
+      minCD = cd;
+      ind = rad;
+    }
+  }
+
+  return make_tuple(minLJ, minCD, ind * slicing, L - dper + ind * slicing);
+}
+
+void writeDperProfile(string &file, double dper)
+{
+  double slicing = 0.1 * diameter_atom;
+  double lj, cd;
+
+  double elj = 0.05;
+  double ecd = 10.0;
+
+  FILE *outf;
+  outf = fopen(file.c_str(), "w");
+  fprintf(outf, "#rad\toff\tCD\tLJ\tE");
+
+  int rad_max = (int) ceil(dper / slicing);
+  for (int rad = 1; rad <= rad_max; rad++) {
+    rad_gap = rad * slicing;
+    box = L + rad_gap;
+    offset = L - dper + rad_gap;
+    lj = totalLJfactor() * elj;
+    cd = totalCDfactor() / ecd;
+    fprintf(outf, "\n%.3f", rad_gap);
+    fprintf(outf, "\t%.3f", offset);
+    fprintf(outf, "\t%.3f", cd);
+    fprintf(outf, "\t%.3f", lj);
+    fprintf(outf, "\t%.3f", cd + lj);
+  }
+  fclose(outf);
 }
